@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 // AES data types
 type Word = [u8; 4]; // A word is 4 bytes (32 bits)
-type Block = [Word; 4]; // A block is 4 words (16 bytes)
+type Block = [Word; 4]; // A block is 4 words (16 bytes). The words represent columns in the states.
 
 // The plaintext to encrypt
 // static PLAINTEXT: u128 = 0x0123456789abcdeffedcba9876543210;
@@ -14,16 +14,16 @@ static KEY: u128       = 0x000102030405060708090a0b0c0d0e0f;
 
 // Round constant used in the key expantion algorithm
 static RCON: [Word; 10] = [
-    word_from_u32(0x00000001),
-    word_from_u32(0x00000002),
-    word_from_u32(0x00000004),
-    word_from_u32(0x00000008),
-    word_from_u32(0x00000010),
-    word_from_u32(0x00000020),
-    word_from_u32(0x00000040),
-    word_from_u32(0x00000080),
-    word_from_u32(0x0000001B),
-    word_from_u32(0x00000036),
+    word_from_u32(0x01000000),
+    word_from_u32(0x02000000),
+    word_from_u32(0x04000000),
+    word_from_u32(0x08000000),
+    word_from_u32(0x10000000),
+    word_from_u32(0x20000000),
+    word_from_u32(0x40000000),
+    word_from_u32(0x80000000),
+    word_from_u32(0x1B000000),
+    word_from_u32(0x36000000),
 ];
 
 // Substitution box (S-Box)
@@ -46,95 +46,51 @@ static SBOX: [u8; 256] = [
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
 ];
 
+/// Converts a 32-bit value into a "Word" so individual bytes may be accessed.
+/// The bytes are stored in big endian order, i.e:
+/// Given 0xaabbccdd, the output would be:
+/// word[0] = 0xaa,
+/// word[1] = 0xbb,
+/// word[2] = 0xcc,
+/// word[3] = 0xdd
 const fn word_from_u32(value: u32) -> Word {
     return [
-        ((value >> 0  ) & 0xff) as u8,
-        ((value >> 8  ) & 0xff) as u8,
-        ((value >> 16 ) & 0xff) as u8,
         ((value >> 24 ) & 0xff) as u8,
-    ];
-}
-
-fn u128_to_byte_array(value: u128) -> [u8; 16] {
-    return [
-        ((value >> 0  ) & 0xff) as u8,
-        ((value >> 8  ) & 0xff) as u8,
         ((value >> 16 ) & 0xff) as u8,
-        ((value >> 24 ) & 0xff) as u8,
-        ((value >> 32 ) & 0xff) as u8,
-        ((value >> 40 ) & 0xff) as u8,
-        ((value >> 48 ) & 0xff) as u8,
-        ((value >> 56 ) & 0xff) as u8,
-        ((value >> 64 ) & 0xff) as u8,
-        ((value >> 72 ) & 0xff) as u8,
-        ((value >> 80 ) & 0xff) as u8,
-        ((value >> 88 ) & 0xff) as u8,
-        ((value >> 96 ) & 0xff) as u8,
-        ((value >> 104) & 0xff) as u8,
-        ((value >> 112) & 0xff) as u8,
-        ((value >> 120) & 0xff) as u8,
+        ((value >> 8  ) & 0xff) as u8,
+        ((value >> 0  ) & 0xff) as u8,
     ];
 }
 
-fn block_from_byte_array(array: &[u8; 16]) -> Block {
+/// Converts a 128-bit value into a "Block" so the individual words (and bytes) may be accessed.
+/// Given 0xa0a1a2a3b0b1b2b3c0c1c2c3d0d1d2d3, the output would be:
+/// block[0] = {0xa0 0xa1 0xa2 0xa3},
+/// block[0] = {0xb0 0xb1 0xb2 0xb3},
+/// block[0] = {0xc0 0xc1 0xc2 0xc3},
+/// block[0] = {0xd0 0xd1 0xd2 0xd3}
+const fn block_from_u128(value: u128) -> Block {
     return [
-        [array[0], array[4], array[8] , array[12]],
-        [array[1], array[5], array[9] , array[13]],
-        [array[2], array[6], array[10], array[14]],
-        [array[3], array[7], array[11], array[15]],
+        word_from_u32(((value >> 96) as u32) & 0xffffffff),
+        word_from_u32(((value >> 64) as u32) & 0xffffffff),
+        word_from_u32(((value >> 32) as u32) & 0xffffffff),
+        word_from_u32(((value >> 0 ) as u32) & 0xffffffff),
     ];
 }
 
-fn block_from_u128(value: u128) -> Block {
-    return block_from_byte_array(&u128_to_byte_array(value));
+/// Converts a "Word" into a native 32-bit unsigned int
+const fn u32_from_word(word: &Word) -> u32 {
+    return (word[3] as u32) << 0
+         | (word[2] as u32) << 8
+         | (word[1] as u32) << 16
+         | (word[0] as u32) << 24;
 }
 
-fn u32_from_word(word: &Word) -> u32 {
-    return ( 0
-           | (word[0] as u32) << 0
-           | (word[1] as u32) << 8
-           | (word[2] as u32) << 16
-           | (word[3] as u32) << 24
-    );
-}
-
-fn u128_from_block(block: &Block) -> u128 {
-    return ( 0
-           | (block[0][0] as u128) << 0
-           | (block[1][0] as u128) << 8
-           | (block[2][0] as u128) << 16
-           | (block[3][0] as u128) << 24
-           | (block[0][1] as u128) << 32
-           | (block[1][1] as u128) << 40
-           | (block[2][1] as u128) << 48
-           | (block[3][1] as u128) << 56
-           | (block[0][2] as u128) << 64
-           | (block[1][2] as u128) << 72
-           | (block[2][2] as u128) << 80
-           | (block[3][2] as u128) << 88
-           | (block[0][3] as u128) << 96
-           | (block[1][3] as u128) << 104
-           | (block[2][3] as u128) << 112
-           | (block[3][3] as u128) << 120
-    );
-}
-
-fn block_from_word_columns(words: &[Word; 4]) -> Block {
-    return [
-        [words[0][0], words[1][0], words[2][0], words[3][0]],
-        [words[0][1], words[1][1], words[2][1], words[3][1]],
-        [words[0][2], words[1][2], words[2][2], words[3][2]],
-        [words[0][3], words[1][3], words[2][3], words[3][3]],
-    ];
-}
-
-fn block_from_word_rows(words: &[Word; 4]) -> Block {
-    return [
-        [words[0][0], words[0][1], words[0][2], words[0][3]],
-        [words[1][0], words[1][1], words[1][2], words[1][3]],
-        [words[2][0], words[2][1], words[2][2], words[2][3]],
-        [words[3][0], words[3][1], words[3][2], words[3][3]],
-    ];
+/// Converts a "Block" into a native 128-bit unsigned int
+const fn u128_from_block(block: &Block) -> u128 {
+    return (u32_from_word(&block[3]) as u128) << 0
+         | (u32_from_word(&block[2]) as u128) << 32
+         | (u32_from_word(&block[1]) as u128) << 64
+         | (u32_from_word(&block[0]) as u128) << 96;
 }
 
 // Perform the s-box substitution
@@ -220,17 +176,17 @@ fn multiply_byte(x: u8, y: u8) -> u8 {
 }
 
 // Takes a 16 byte input key and expands it in to 44 words (176 bytes), organized into an array of 11 16-byte words (the round keys)
-fn expand_key(key: Block) -> [Word; 44] {
+fn expand_key(key: &Block) -> [Block; 11] {
     println!("=== Key Expantion ===");
 
     // Initialize the word array
     let mut words: [Word; 44] = [[0; 4]; 44];
 
     // Copy the key into the first 4 words
-    words[0] = [key[3][3], key[2][3], key[1][3], key[0][3]];
-    words[1] = [key[3][2], key[2][2], key[1][2], key[0][2]];
-    words[2] = [key[3][1], key[2][1], key[1][1], key[0][1]];
-    words[3] = [key[3][0], key[2][0], key[1][0], key[0][0]];
+    words[0] = key[0];
+    words[1] = key[1];
+    words[2] = key[2];
+    words[3] = key[3];
 
     println!("w0 = {:02x?}", words[0]);
     println!("w1 = {:02x?}", words[1]);
@@ -260,7 +216,19 @@ fn expand_key(key: Block) -> [Word; 44] {
         println!("w{} = w{} ^ w{} = {:02x?}", (4*i) + 3, (4*i) - 1, (4*i) + 2,  words[(4*i) + 3]);
     }
 
-    return words;
+    return [
+        [words[0] , words[1] , words[2] , words[3]],
+        [words[4] , words[5] , words[6] , words[7]],
+        [words[8] , words[9] , words[10], words[11]],
+        [words[12], words[13], words[14], words[15]],
+        [words[16], words[17], words[18], words[19]],
+        [words[20], words[21], words[22], words[23]],
+        [words[24], words[25], words[26], words[27]],
+        [words[28], words[29], words[30], words[31]],
+        [words[32], words[33], words[34], words[35]],
+        [words[36], words[37], words[38], words[39]],
+        [words[40], words[41], words[42], words[43]],
+    ];
 }
 
 fn add_round_key(input: &Block, round_key: &Block) -> Block {
@@ -274,10 +242,10 @@ fn add_round_key(input: &Block, round_key: &Block) -> Block {
 // row 3 => shift left by 3
 fn shift_rows(block: &Block) -> Block {
     return [
-        shift_word(&block[0], 0),
-        shift_word(&block[1], 1),
-        shift_word(&block[2], 2),
-        shift_word(&block[3], 3),
+        [block[0][0], block[1][1], block[2][2], block[3][3]],
+        [block[1][0], block[2][1], block[3][2], block[0][3]],
+        [block[2][0], block[3][1], block[0][2], block[1][3]],
+        [block[3][0], block[0][1], block[1][2], block[2][3]],
     ];
 }
 
@@ -287,13 +255,8 @@ fn mix_columns(block: &Block) -> Block {
     let mut new_block = [[0; 4]; 4];
 
     for col in 0..4 {
-        // Create the column
-        let column = [
-            block[0][col],
-            block[1][col],
-            block[2][col],
-            block[3][col],
-        ];
+        // get the column
+        let column = block[col];
 
         // Multiply by matrix (inlined, using equations from ch 6.3)
         let new_column = [
@@ -304,20 +267,17 @@ fn mix_columns(block: &Block) -> Block {
         ];
 
         // Insert into block
-        new_block[0][col] = new_column[0];
-        new_block[1][col] = new_column[1];
-        new_block[2][col] = new_column[2];
-        new_block[3][col] = new_column[3];
+        new_block[col] = new_column;
     }
 
     return new_block;
 }
 
 fn print_block(block: &Block) {
-    println!("0x{:02x} 0x{:02x} 0x{:02x} 0x{:02x}", block[0][0], block[0][1], block[0][2], block[0][3]);
-    println!("0x{:02x} 0x{:02x} 0x{:02x} 0x{:02x}", block[1][0], block[1][1], block[1][2], block[1][3]);
-    println!("0x{:02x} 0x{:02x} 0x{:02x} 0x{:02x}", block[2][0], block[2][1], block[2][2], block[2][3]);
-    println!("0x{:02x} 0x{:02x} 0x{:02x} 0x{:02x}", block[3][0], block[3][1], block[3][2], block[3][3]);
+    println!("{:02x} {:02x} {:02x} {:02x}", block[0][0], block[1][0], block[2][0], block[3][0]);
+    println!("{:02x} {:02x} {:02x} {:02x}", block[0][1], block[1][1], block[2][1], block[3][1]);
+    println!("{:02x} {:02x} {:02x} {:02x}", block[0][2], block[1][2], block[2][2], block[3][2]);
+    println!("{:02x} {:02x} {:02x} {:02x}", block[0][3], block[1][3], block[2][3], block[3][3]);
 }
 
 fn main() {
@@ -329,18 +289,17 @@ fn main() {
 
     //let round_keys: [Word; 44] = expand_key(block_from_u128(0xEAD27321B58DBAD2312BF5607F8D292F));
     //let round_keys: [Word; 44] = expand_key(block_from_u128(0x2f60d22129f5ba738d2b8dd27f31b5ea));
-    let round_keys: [Word; 44] = expand_key(block_from_u128(KEY));
-    let mut round_key = block_from_word_columns(&round_keys[0..4].try_into().unwrap());
+    let round_keys: [Block; 11] = expand_key(&block_from_u128(KEY));
 
+    println!("\n=== Encryption Rounds ===");
     // Initial transformation
-    println!("R{} (key = 0x{:032x})", 0, u128_from_block(&round_key));
-    state = add_round_key(&state, &round_key);
+    println!("R{} (key = 0x{:032x})", 0, u128_from_block(&round_keys[0]));
+    state = add_round_key(&state, &round_keys[0]);
     println!("=> 0x{:032x}", u128_from_block(&state));
 
     // Round transformations
-    for round in 1..11 {
-        let mut round_key = block_from_word_columns(&round_keys[(4*round)..(4*round)+4].try_into().unwrap());
-        println!("R{} (key = 0x{:032x})", round, u128_from_block(&round_key));
+    for round in 1..10 {
+        println!("R{} (key = 0x{:032x})", round, u128_from_block(&round_keys[round]));
 
         // Substitute bytes
         state = sub_block(&state);
@@ -352,15 +311,26 @@ fn main() {
         state = mix_columns(&state);
 
         // Add round key
-        state = add_round_key(&state, &round_keys[(4*round)..(4*round)+4].try_into().unwrap());
+        state = add_round_key(&state, &round_keys[round]);
 
         println!("=> 0x{:032x}", u128_from_block(&state));
     }
 
+    // final transformation
+    println!("R{} (key = 0x{:032x})", 10, u128_from_block(&round_keys[10]));
+    // Substitute bytes
+    state = sub_block(&state);
+    // Shift rows
+    state = shift_rows(&state);
+    // Add round key
+    state = add_round_key(&state, &round_keys[10]);
+    println!("=> 0x{:032x}", u128_from_block(&state));
+
     println!("Ciphertext: 0x{:032x}", u128_from_block(&state));
 
-    // test mix columns
-    let test_in = block_from_u128(0xc5ad2df0b098335c965d4583856504ea);
+    // test transformation operations
+    println!("\n=== Transformation function tests ===");
+    let test_in = block_from_u128(0xea835cf00445332d655d98ad8596b0c5);
     let test_sub = sub_block(&test_in);
     let test_shift = shift_rows(&test_sub);
     let test_mix = mix_columns(&test_shift);
