@@ -5,12 +5,12 @@ type Word = [u8; 4]; // A word is 4 bytes (32 bits)
 type Block = [Word; 4]; // A block is 4 words (16 bytes). The words represent columns in the states.
 
 // The plaintext to encrypt
-// static PLAINTEXT: u128 = 0x0123456789abcdeffedcba9876543210;
-static PLAINTEXT: u128 = 0x00112233445566778899aabbccddeeff;
+static PLAINTEXT: u128 = 0x0123456789abcdeffedcba9876543210;
+//static PLAINTEXT: u128 = 0x00112233445566778899aabbccddeeff;
 
 // The key to use
-//static KEY: u128       = 0x0f1571c947d9e8590cb7add6af7f6798;
-static KEY: u128       = 0x000102030405060708090a0b0c0d0e0f;
+static KEY: u128       = 0x0f1571c947d9e8590cb7add6af7f6798;
+//static KEY: u128       = 0x000102030405060708090a0b0c0d0e0f;
 
 // Round constant used in the key expantion algorithm
 static RCON: [Word; 10] = [
